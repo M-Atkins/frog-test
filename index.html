@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Froggy Forest 🐸</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a1a0a; overflow: hidden; font-family: 'Courier New', monospace; }
+  #canvas-container { width: 100vw; height: 100vh; }
+  canvas { display: block; }
+
+  #hud {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  #title-screen {
+    position: fixed;
+    inset: 0;
+    background: #0a1a0a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    transition: opacity 0.8s ease;
+  }
+  #title-screen.fade-out { opacity: 0; pointer-events: none; }
+
+  .title-frog {
+    font-size: 96px;
+    animation: bounce 1s ease-in-out infinite;
+    filter: drop-shadow(0 0 30px #4ade8066);
+  }
+  @keyframes bounce {
+    0%,100% { transform: translateY(0); }
+    50% { transform: translateY(-18px); }
+  }
+
+  .title-text {
+    font-size: 52px;
+    color: #4ade80;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    font-weight: bold;
+    text-shadow: 0 0 40px #4ade8088, 0 0 80px #4ade8033;
+    margin: 12px 0 8px;
+  }
+  .subtitle {
+    color: #86efac99;
+    font-size: 14px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 28px;
+  }
+
+  .ws-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    align-items: center;
+  }
+  #ws-url {
+    background: #0f2a0f;
+    border: 1px solid #4ade8055;
+    color: #4ade80;
+    padding: 10px 14px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    width: 320px;
+    outline: none;
+    letter-spacing: 1px;
+  }
+  #ws-url::placeholder { color: #4ade8044; }
+  #ws-url:focus { border-color: #4ade80aa; box-shadow: 0 0 12px #4ade8033; }
+
+  #ws-status {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: #4ade8066;
+    margin-bottom: 16px;
+    height: 16px;
+    text-transform: uppercase;
+  }
+  #ws-status.connected { color: #4ade80cc; }
+  #ws-status.error     { color: #f87171cc; }
+
+  .start-btn {
+    border: 2px solid #4ade80;
+    color: #4ade80;
+    background: transparent;
+    padding: 14px 48px;
+    font-size: 18px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s;
+    pointer-events: all;
+    animation: pulse-btn 2s ease-in-out infinite;
+  }
+  @keyframes pulse-btn {
+    0%,100% { box-shadow: 0 0 0 0 #4ade8033; }
+    50% { box-shadow: 0 0 0 12px #4ade8000; }
+  }
+  .start-btn:hover { background: #4ade8022; box-shadow: 0 0 30px #4ade8055; }
+
+  #controls-hint {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #4ade8077;
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-align: center;
+    line-height: 2;
+  }
+
+  #top-bar {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #4ade80cc;
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    text-shadow: 0 0 10px #4ade8055;
+  }
+
+  #player-count {
+    position: fixed;
+    top: 20px;
+    right: 24px;
+    color: #4ade8088;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  /* Mobile d-pad */
+  #dpad {
+    position: fixed;
+    bottom: 40px;
+    left: 40px;
+    display: none;
+    pointer-events: all;
+  }
+  @media (pointer: coarse) { #dpad { display: grid; } }
+  #dpad {
+    grid-template-columns: 44px 44px 44px;
+    grid-template-rows: 44px 44px 44px;
+    gap: 4px;
+  }
+  .dpad-btn {
+    background: #4ade8022;
+    border: 1px solid #4ade8055;
+    color: #4ade80;
+    font-size: 20px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .dpad-btn:active { background: #4ade8044; }
+  #btn-up    { grid-column: 2; grid-row: 1; }
+  #btn-left  { grid-column: 1; grid-row: 2; }
+  #btn-down  { grid-column: 2; grid-row: 3; }
+  #btn-right { grid-column: 3; grid-row: 2; }
+  #btn-center { grid-column: 2; grid-row: 2; background: transparent; border-color: transparent; }
+</style>
+</head>
+<body>
+
+<div id="title-screen">
+  <div class="title-frog">🐸</div>
+  <div class="title-text">Froggy Forest</div>
+  <div class="subtitle">Multiplayer · Low-poly Adventure</div>
+
+  <div class="ws-row">
+    <input id="ws-url" type="text" placeholder="wss://your-server.railway.app" spellcheck="false" />
+  </div>
+  <div id="ws-status">Enter server URL above (or leave blank for solo)</div>
+
+  <button class="start-btn" id="start-btn">Hop In</button>
+</div>
+
+<div id="hud">
+  <div id="top-bar">🐸 Froggy Forest &nbsp;·&nbsp; Arrow Keys to Move</div>
+  <div id="player-count"></div>
+  <div id="controls-hint">
+    ↑ ↓ ← → &nbsp;Move &nbsp;·&nbsp; Explore the forest
+  </div>
+</div>
+
+<div id="dpad">
+  <div class="dpad-btn" id="btn-up">↑</div>
+  <div class="dpad-btn" id="btn-left">←</div>
+  <div class="dpad-btn" id="btn-center"></div>
+  <div class="dpad-btn" id="btn-right">→</div>
+  <div class="dpad-btn" id="btn-down">↓</div>
+</div>
+
+<div id="canvas-container"></div>
+
+<!-- Three.js r128 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- Cannon.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+
+<script>
+// ─── WORLD SETUP ────────────────────────────────────────────────────────────
+const container = document.getElementById('canvas-container');
+const W = window.innerWidth, H = window.innerHeight;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(W, H);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setClearColor(0x87ceeb, 1);
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x87ceeb, 0.035);
+
+// Isometric-style perspective camera
+const camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 200);
+const CAM_OFFSET = new THREE.Vector3(-14, 18, 14);
+
+// Physics world
+const world = new CANNON.World();
+world.gravity.set(0, -20, 0);
+world.broadphase = new CANNON.NaiveBroadphase();
+world.solver.iterations = 10;
+
+// ─── LIGHTING ───────────────────────────────────────────────────────────────
+const ambientLight = new THREE.AmbientLight(0x88ccaa, 0.7);
+scene.add(ambientLight);
+
+const sunLight = new THREE.DirectionalLight(0xfff5cc, 1.4);
+sunLight.position.set(20, 35, 10);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.shadow.camera.near = 1;
+sunLight.shadow.camera.far = 120;
+sunLight.shadow.camera.left = -50;
+sunLight.shadow.camera.right = 50;
+sunLight.shadow.camera.top = 50;
+sunLight.shadow.camera.bottom = -50;
+sunLight.shadow.bias = -0.001;
+scene.add(sunLight);
+
+const fillLight = new THREE.DirectionalLight(0x6699ff, 0.3);
+fillLight.position.set(-10, 10, -10);
+scene.add(fillLight);
+
+// ─── MATERIALS ──────────────────────────────────────────────────────────────
+const MAT = {
+  ground:    new THREE.MeshLambertMaterial({ color: 0x4a7c3f }),
+  groundDark:new THREE.MeshLambertMaterial({ color: 0x3d6634 }),
+  water:     new THREE.MeshLambertMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.82 }),
+  stone:     new THREE.MeshLambertMaterial({ color: 0x888888 }),
+  stoneDark: new THREE.MeshLambertMaterial({ color: 0x666666 }),
+  trunkBrown:new THREE.MeshLambertMaterial({ color: 0x7c5c3a }),
+  trunkDark: new THREE.MeshLambertMaterial({ color: 0x5a3e22 }),
+  leafGreen: new THREE.MeshLambertMaterial({ color: 0x2d8a2d }),
+  leafLight: new THREE.MeshLambertMaterial({ color: 0x4caf50 }),
+  leafDark:  new THREE.MeshLambertMaterial({ color: 0x1b5e20 }),
+  mushRed:   new THREE.MeshLambertMaterial({ color: 0xd32f2f }),
+  mushWhite: new THREE.MeshLambertMaterial({ color: 0xffffff }),
+  frogBody:  new THREE.MeshLambertMaterial({ color: 0x4caf50 }),
+  frogDark:  new THREE.MeshLambertMaterial({ color: 0x388e3c }),
+  frogBelly: new THREE.MeshLambertMaterial({ color: 0xa5d6a7 }),
+  frogEyeW:  new THREE.MeshLambertMaterial({ color: 0xffffff }),
+  frogEyeB:  new THREE.MeshLambertMaterial({ color: 0x111111 }),
+  logBark:   new THREE.MeshLambertMaterial({ color: 0x6d4c2a }),
+  flowerY:   new THREE.MeshLambertMaterial({ color: 0xffeb3b }),
+  flowerP:   new THREE.MeshLambertMaterial({ color: 0xce93d8 }),
+  flowerW:   new THREE.MeshLambertMaterial({ color: 0xffffff }),
+  grassBlade:new THREE.MeshLambertMaterial({ color: 0x66bb6a }),
+};
+
+// ─── HELPERS ────────────────────────────────────────────────────────────────
+function addPhysicsBox(size, pos, mass = 0) {
+  const shape = new CANNON.Box(new CANNON.Vec3(size.x/2, size.y/2, size.z/2));
+  const body = new CANNON.Body({ mass, shape });
+  body.position.set(pos.x, pos.y, pos.z);
+  world.addBody(body);
+  return body;
+}
+
+function rnd(min, max) { return Math.random() * (max - min) + min; }
+function rndInt(min, max) { return Math.floor(rnd(min, max + 1)); }
+
+// ─── GROUND ─────────────────────────────────────────────────────────────────
+const GROUND_SIZE = 80;
+const groundGeo = new THREE.BoxGeometry(GROUND_SIZE, 1, GROUND_SIZE);
+const ground = new THREE.Mesh(groundGeo, MAT.ground);
+ground.position.y = -0.5;
+ground.receiveShadow = true;
+scene.add(ground);
+addPhysicsBox({ x: GROUND_SIZE, y: 1, z: GROUND_SIZE }, { x: 0, y: -0.5, z: 0 });
+
+// Ground patches (darker)
+for (let i = 0; i < 30; i++) {
+  const size = rnd(2, 7);
+  const geo = new THREE.PlaneGeometry(size, size);
+  const patch = new THREE.Mesh(geo, MAT.groundDark);
+  patch.rotation.x = -Math.PI / 2;
+  patch.position.set(rnd(-35, 35), 0.01, rnd(-35, 35));
+  scene.add(patch);
+}
+
+// ─── POND ────────────────────────────────────────────────────────────────────
+function makePond(cx, cz, rx, rz) {
+  const pts = [];
+  const segs = 16;
+  for (let i = 0; i < segs; i++) {
+    const a = (i / segs) * Math.PI * 2;
+    pts.push(new THREE.Vector2(Math.cos(a) * rx, Math.sin(a) * rz));
+  }
+  const shape = new THREE.Shape(pts);
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.18, bevelEnabled: false });
+  const mesh = new THREE.Mesh(geo, MAT.water);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(cx, 0.02, cz);
+  scene.add(mesh);
+}
+makePond(-18, -12, 5, 3.5);
+makePond(15, 14, 4, 2.8);
+
+// ─── STONES ──────────────────────────────────────────────────────────────────
+function makeStone(x, z, scale = 1) {
+  const geo = new THREE.DodecahedronGeometry(scale, 0);
+  geo.scale(1, 0.65, 0.9);
+  const mat = Math.random() < 0.5 ? MAT.stone : MAT.stoneDark;
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, scale * 0.4, z);
+  mesh.rotation.y = rnd(0, Math.PI * 2);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+}
+const stonePositions = [
+  [-22,5,1.0],[-21,6.5,0.7],[10,-20,1.2],[11,-19,0.8],
+  [25,-8,0.9],[24,-7,1.3],[-5,25,1.0],[-6,24,0.7],
+  [18,22,0.8],[19,23,1.1],[-28,-18,1.3],[-29,-17,0.9],
+];
+stonePositions.forEach(([x,z,s]) => makeStone(x, z, s));
+
+// ─── TREE ────────────────────────────────────────────────────────────────────
+function makeTree(x, z, variant = 0) {
+  const group = new THREE.Group();
+  const trunkH = rnd(1.8, 3.2);
+  const trunkR = rnd(0.22, 0.38);
+
+  const trunkGeo = new THREE.CylinderGeometry(trunkR * 0.7, trunkR, trunkH, 6);
+  const trunk = new THREE.Mesh(trunkGeo, variant === 2 ? MAT.trunkDark : MAT.trunkBrown);
+  trunk.position.y = trunkH / 2;
+  trunk.castShadow = true;
+  group.add(trunk);
+
+  const colors = [MAT.leafGreen, MAT.leafLight, MAT.leafDark];
+  const leafMat = colors[variant % 3];
+  const layers = rndInt(2, 3);
+  for (let i = 0; i < layers; i++) {
+    const r = rnd(1.6, 2.8) * (1 - i * 0.2);
+    const h = rnd(1.8, 3.0);
+    const geo = new THREE.ConeGeometry(r, h, 7);
+    const cone = new THREE.Mesh(geo, leafMat);
+    cone.position.y = trunkH + i * (h * 0.55);
+    cone.rotation.y = rnd(0, Math.PI);
+    cone.castShadow = true;
+    group.add(cone);
+  }
+
+  group.position.set(x, 0, z);
+  group.rotation.y = rnd(0, Math.PI * 2);
+  scene.add(group);
+
+  addPhysicsBox(
+    { x: trunkR * 2, y: trunkH * 2, z: trunkR * 2 },
+    { x, y: trunkH / 2, z }
+  );
+}
+
+const treeDefs = [];
+for (let i = 0; i < 80; i++) {
+  let x, z;
+  do { x = rnd(-38, 38); z = rnd(-38, 38); }
+  while (Math.abs(x) < 6 && Math.abs(z) < 6);
+  treeDefs.push([x, z, rndInt(0, 2)]);
+}
+treeDefs.forEach(([x, z, v]) => makeTree(x, z, v));
+
+// ─── FALLEN LOG ──────────────────────────────────────────────────────────────
+function makeLog(x, z, ry = 0) {
+  const geo = new THREE.CylinderGeometry(0.4, 0.45, 5, 8);
+  const log = new THREE.Mesh(geo, MAT.logBark);
+  log.rotation.z = Math.PI / 2;
+  log.rotation.y = ry;
+  log.position.set(x, 0.42, z);
+  log.castShadow = true;
+  log.receiveShadow = true;
+  scene.add(log);
+}
+makeLog(-10, 8, 0.4);
+makeLog(12, -5, 1.1);
+makeLog(-5, -22, 0.0);
+
+// ─── MUSHROOMS ───────────────────────────────────────────────────────────────
+function makeMushroom(x, z, color) {
+  const g = new THREE.Group();
+  const stemGeo = new THREE.CylinderGeometry(0.1, 0.14, 0.5, 6);
+  const stem = new THREE.Mesh(stemGeo, MAT.mushWhite);
+  stem.position.y = 0.25;
+  g.add(stem);
+  const capGeo = new THREE.SphereGeometry(0.35, 7, 5, 0, Math.PI * 2, 0, Math.PI / 2);
+  const cap = new THREE.Mesh(capGeo, color === 'red' ? MAT.mushRed : MAT.flowerP);
+  cap.position.y = 0.55;
+  cap.scale.y = 0.7;
+  g.add(cap);
+  g.position.set(x, 0, z);
+  scene.add(g);
+}
+[[-13,4,'red'],[-14,5,'red'],[-14,3,'purple'],[8,15,'red'],[9,15,'purple'],
+ [20,-15,'red'],[-25,10,'purple'],[-8,-18,'red']].forEach(([x,z,c]) => makeMushroom(x,z,c));
+
+// ─── GRASS BLADES ────────────────────────────────────────────────────────────
+for (let i = 0; i < 200; i++) {
+  const h = rnd(0.3, 0.8);
+  const geo = new THREE.ConeGeometry(0.05, h, 4);
+  const blade = new THREE.Mesh(geo, MAT.grassBlade);
+  blade.position.set(rnd(-38, 38), h / 2, rnd(-38, 38));
+  blade.rotation.y = rnd(0, Math.PI * 2);
+  blade.rotation.z = rnd(-0.2, 0.2);
+  scene.add(blade);
+}
+
+// ─── FLOWERS ─────────────────────────────────────────────────────────────────
+function makeFlower(x, z, mat) {
+  const g = new THREE.Group();
+  const stemGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.4, 4);
+  const stem = new THREE.Mesh(stemGeo, MAT.grassBlade);
+  stem.position.y = 0.2;
+  g.add(stem);
+  const petalGeo = new THREE.SphereGeometry(0.12, 5, 4);
+  const petal = new THREE.Mesh(petalGeo, mat);
+  petal.position.y = 0.44;
+  petal.scale.y = 0.5;
+  g.add(petal);
+  g.position.set(x, 0, z);
+  scene.add(g);
+}
+for (let i = 0; i < 60; i++) {
+  const mats = [MAT.flowerY, MAT.flowerP, MAT.flowerW];
+  makeFlower(rnd(-36, 36), rnd(-36, 36), mats[rndInt(0, 2)]);
+}
+
+// ─── FIREFLIES ───────────────────────────────────────────────────────────────
+const fireflies = [];
+for (let i = 0; i < 8; i++) {
+  const light = new THREE.PointLight(0xaaff66, 0.8, 6);
+  light.position.set(rnd(-30, 30), rnd(1, 3), rnd(-30, 30));
+  scene.add(light);
+  const dot = new THREE.Mesh(
+    new THREE.SphereGeometry(0.08, 4, 4),
+    new THREE.MeshBasicMaterial({ color: 0xccff88 })
+  );
+  dot.position.copy(light.position);
+  scene.add(dot);
+  fireflies.push({ light, dot, ox: light.position.x, oz: light.position.z, phase: rnd(0, Math.PI * 2) });
+}
+
+// ─── FROG BUILDER ────────────────────────────────────────────────────────────
+// bodyHue: 0-360 for remote players, null = default green for local player
+function buildFrog(bodyHue) {
+  const group = new THREE.Group();
+
+  function hsl(h, s, l) { return new THREE.Color().setHSL(h/360, s, l); }
+
+  const isColoured = bodyHue !== null && bodyHue !== undefined;
+  const bodyColor  = isColoured ? hsl(bodyHue, 0.72, 0.40) : new THREE.Color(0x4caf50);
+  const darkColor  = isColoured ? hsl(bodyHue, 0.65, 0.28) : new THREE.Color(0x388e3c);
+  const bellyColor = isColoured ? hsl(bodyHue, 0.40, 0.72) : new THREE.Color(0xa5d6a7);
+
+  const bodyMat  = new THREE.MeshLambertMaterial({ color: bodyColor });
+  const darkMat  = new THREE.MeshLambertMaterial({ color: darkColor });
+  const bellyMat = new THREE.MeshLambertMaterial({ color: bellyColor });
+
+  // Body
+  const bodyGeo = new THREE.SphereGeometry(0.55, 8, 6);
+  bodyGeo.scale(1, 0.7, 1.1);
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.castShadow = true;
+  group.add(body);
+
+  // Belly
+  const bellyGeo = new THREE.SphereGeometry(0.38, 8, 5);
+  bellyGeo.scale(1, 0.5, 0.9);
+  const belly = new THREE.Mesh(bellyGeo, bellyMat);
+  belly.position.set(0, -0.12, 0.18);
+  group.add(belly);
+
+  // Head
+  const headGeo = new THREE.SphereGeometry(0.42, 8, 6);
+  headGeo.scale(1.05, 0.8, 1.0);
+  const head = new THREE.Mesh(headGeo, bodyMat);
+  head.position.set(0, 0.22, 0.38);
+  head.castShadow = true;
+  group.add(head);
+
+  // Eyes
+  function makeEye(side) {
+    const eg = new THREE.Group();
+    eg.add(new THREE.Mesh(new THREE.SphereGeometry(0.13, 7, 6), MAT.frogEyeW));
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), MAT.frogEyeB);
+    pupil.position.set(0, 0, 0.08);
+    eg.add(pupil);
+    const shine = new THREE.Mesh(new THREE.SphereGeometry(0.025, 4, 4), MAT.frogEyeW);
+    shine.position.set(0.04, 0.04, 0.12);
+    eg.add(shine);
+    eg.position.set(side * 0.25, 0.38, 0.55);
+    return eg;
+  }
+  group.add(makeEye(-1));
+  group.add(makeEye(1));
+
+  // Back legs
+  function makeBackLeg(side) {
+    const g = new THREE.Group();
+    const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.08, 0.38, 5), darkMat);
+    upper.rotation.z = side * 0.7;
+    upper.position.set(side * 0.2, -0.1, 0);
+    g.add(upper);
+    const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.35, 5), darkMat);
+    lower.rotation.z = side * 0.3;
+    lower.position.set(side * 0.42, -0.28, 0);
+    g.add(lower);
+    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.1, 5, 4), darkMat);
+    foot.scale.set(1.5, 0.5, 1);
+    foot.position.set(side * 0.52, -0.38, 0.06);
+    g.add(foot);
+    g.position.set(side * 0.3, -0.15, -0.3);
+    return g;
+  }
+  const leftLeg  = makeBackLeg(-1);
+  const rightLeg = makeBackLeg(1);
+  group.add(leftLeg);
+  group.add(rightLeg);
+
+  // Front arms
+  function makeFrontLeg(side) {
+    const g = new THREE.Group();
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.28, 5), darkMat);
+    arm.rotation.z = side * 1.0;
+    arm.position.set(side * 0.18, -0.05, 0);
+    g.add(arm);
+    g.position.set(side * 0.42, 0.05, 0.28);
+    return g;
+  }
+  group.add(makeFrontLeg(-1));
+  group.add(makeFrontLeg(1));
+
+  // Nostrils
+  [[-0.1, 0.3, 0.78],[0.1, 0.3, 0.78]].forEach(([x, y, z]) => {
+    const n = new THREE.Mesh(new THREE.SphereGeometry(0.03, 4, 3), darkMat);
+    n.position.set(x, y, z);
+    group.add(n);
+  });
+
+  return { group, leftLeg, rightLeg, body };
+}
+
+// ─── LOCAL FROG ──────────────────────────────────────────────────────────────
+const localFrog = buildFrog(null); // green
+const frogGroup = localFrog.group;
+const leftLeg   = localFrog.leftLeg;
+const rightLeg  = localFrog.rightLeg;
+const bodyMesh  = localFrog.body;
+
+frogGroup.position.set(0, 0.7, 0);
+scene.add(frogGroup);
+
+// Shadow blob
+const blobGeo = new THREE.CircleGeometry(0.45, 12);
+const blobMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.18 });
+const shadowBlob = new THREE.Mesh(blobGeo, blobMat);
+shadowBlob.rotation.x = -Math.PI / 2;
+shadowBlob.position.y = 0.01;
+scene.add(shadowBlob);
+
+// Physics
+const frogShape = new CANNON.Sphere(0.5);
+const frogBody = new CANNON.Body({ mass: 1, shape: frogShape });
+frogBody.position.set(0, 1.5, 0);
+frogBody.linearDamping = 0.85;
+frogBody.angularDamping = 1.0;
+frogBody.fixedRotation = true;
+world.addBody(frogBody);
+
+// ─── REMOTE FROGS ────────────────────────────────────────────────────────────
+const remotePlayers = {}; // id -> { group, leftLeg, rightLeg, tx, ty, tz, try, legPhase }
+
+function addRemotePlayer(id, hue, x, y, z, ry) {
+  if (remotePlayers[id]) return;
+  const frog = buildFrog(hue);
+  frog.group.position.set(x, y, z);
+  frog.group.rotation.y = ry;
+  scene.add(frog.group);
+
+  // Name tag (simple floating sprite)
+  const canvas = document.createElement('canvas');
+  canvas.width = 128; canvas.height = 40;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = `hsl(${hue}, 60%, 60%)`;
+  ctx.font = 'bold 22px Courier New';
+  ctx.textAlign = 'center';
+  ctx.fillText(`🐸 #${id}`, 64, 28);
+  const tex = new THREE.CanvasTexture(canvas);
+  const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+  const sprite = new THREE.Sprite(spriteMat);
+  sprite.scale.set(2.2, 0.7, 1);
+  sprite.position.set(0, 1.6, 0);
+  frog.group.add(sprite);
+
+  remotePlayers[id] = {
+    group: frog.group,
+    leftLeg: frog.leftLeg,
+    rightLeg: frog.rightLeg,
+    tx: x, ty: y, tz: z, try: ry,
+    legPhase: 0,
+    prevX: x, prevZ: z,
+  };
+  updatePlayerCount();
+}
+
+function removeRemotePlayer(id) {
+  if (!remotePlayers[id]) return;
+  scene.remove(remotePlayers[id].group);
+  delete remotePlayers[id];
+  updatePlayerCount();
+}
+
+function updatePlayerCount() {
+  const count = Object.keys(remotePlayers).length + 1;
+  document.getElementById('player-count').textContent = `🐸 × ${count} online`;
+}
+
+// ─── WEBSOCKET ───────────────────────────────────────────────────────────────
+let ws = null;
+let myId = null;
+let wsConnected = false;
+
+function connectWS(url) {
+  const statusEl = document.getElementById('ws-status');
+  try {
+    ws = new WebSocket(url);
+  } catch(e) {
+    statusEl.textContent = 'Invalid URL';
+    statusEl.className = 'error';
+    return;
+  }
+
+  statusEl.textContent = 'Connecting…';
+  statusEl.className = '';
+
+  ws.onopen = () => {
+    wsConnected = true;
+    statusEl.textContent = 'Connected ✓';
+    statusEl.className = 'connected';
+  };
+
+  ws.onmessage = (evt) => {
+    let msg;
+    try { msg = JSON.parse(evt.data); } catch(_) { return; }
+
+    if (msg.type === 'welcome') {
+      myId = msg.id;
+    } else if (msg.type === 'peer_joined') {
+      addRemotePlayer(msg.id, msg.hue, msg.x, msg.y, msg.z, msg.ry);
+    } else if (msg.type === 'peer_move') {
+      const p = remotePlayers[msg.id];
+      if (p) {
+        p.prevX = p.tx; p.prevZ = p.tz;
+        p.tx = msg.x; p.ty = msg.y; p.tz = msg.z; p.try = msg.ry;
+      }
+    } else if (msg.type === 'peer_left') {
+      removeRemotePlayer(msg.id);
+    }
+  };
+
+  ws.onclose = () => {
+    wsConnected = false;
+    // Clean up all remote players
+    Object.keys(remotePlayers).forEach(removeRemotePlayer);
+  };
+
+  ws.onerror = () => {
+    statusEl.textContent = 'Connection failed';
+    statusEl.className = 'error';
+  };
+}
+
+// Throttled position send — ~20 times/sec
+let lastSend = 0;
+function maybeSendPosition(x, y, z, ry) {
+  if (!wsConnected || !ws) return;
+  const now = performance.now();
+  if (now - lastSend < 50) return;
+  lastSend = now;
+  ws.send(JSON.stringify({ type: 'move', x, y, z, ry }));
+}
+
+// ─── INPUT ───────────────────────────────────────────────────────────────────
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code.startsWith('Arrow')) e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+const dpadState = { up: false, down: false, left: false, right: false };
+function bindDpad(id, dir) {
+  const el = document.getElementById(id);
+  el.addEventListener('touchstart', e => { e.preventDefault(); dpadState[dir] = true; }, { passive: false });
+  el.addEventListener('touchend',   e => { e.preventDefault(); dpadState[dir] = false; }, { passive: false });
+  el.addEventListener('mousedown',  () => dpadState[dir] = true);
+  el.addEventListener('mouseup',    () => dpadState[dir] = false);
+}
+bindDpad('btn-up',    'up');
+bindDpad('btn-down',  'down');
+bindDpad('btn-left',  'left');
+bindDpad('btn-right', 'right');
+
+function isUp()    { return keys['ArrowUp']    || keys['KeyS'] || dpadState.up; }
+function isDown()  { return keys['ArrowDown']  || keys['KeyW'] || dpadState.down; }
+function isLeft()  { return keys['ArrowLeft']  || keys['KeyA'] || dpadState.left; }
+function isRight() { return keys['ArrowRight'] || keys['KeyD'] || dpadState.right; }
+
+// ─── ANIMATION STATE ─────────────────────────────────────────────────────────
+let time = 0;
+let isMoving = false;
+let frogFacing = 0;
+let targetFacing = 0;
+const MOVE_SPEED = 7;
+const BOUNDARY = 37;
+
+let hopPhase = 0;
+let hopActive = false;
+let hopCooldown = 0;
+const HOP_INTERVAL = 0.22;
+const HOP_HEIGHT = 0.35;
+const HOP_DURATION = 0.18;
+
+const clock = new THREE.Clock();
+
+// ─── ANIMATE ─────────────────────────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  time += dt;
+
+  // ── Input → force ──────────────────────────────────────────────────────────
+  const ISO_FORWARD = new THREE.Vector3(-1, 0,  1).normalize();
+  const ISO_BACK    = new THREE.Vector3( 1, 0, -1).normalize();
+  const ISO_LEFT    = new THREE.Vector3(-1, 0, -1).normalize();
+  const ISO_RIGHT   = new THREE.Vector3( 1, 0,  1).normalize();
+
+  let moveDir = new THREE.Vector3(0, 0, 0);
+  if (isUp())    moveDir.add(ISO_FORWARD);
+  if (isDown())  moveDir.add(ISO_BACK);
+  if (isLeft())  moveDir.add(ISO_LEFT);
+  if (isRight()) moveDir.add(ISO_RIGHT);
+
+  isMoving = moveDir.lengthSq() > 0;
+
+  if (isMoving) {
+    moveDir.normalize();
+    targetFacing = Math.atan2(moveDir.x, moveDir.z);
+    frogBody.applyForce(
+      new CANNON.Vec3(moveDir.x * MOVE_SPEED, 0, moveDir.z * MOVE_SPEED),
+      frogBody.position
+    );
+    const p = frogBody.position;
+    if (Math.abs(p.x) > BOUNDARY) { p.x = Math.sign(p.x) * BOUNDARY; frogBody.velocity.x = 0; }
+    if (Math.abs(p.z) > BOUNDARY) { p.z = Math.sign(p.z) * BOUNDARY; frogBody.velocity.z = 0; }
+  }
+
+  world.step(1 / 60, dt, 3);
+
+  // ── Hop ────────────────────────────────────────────────────────────────────
+  hopCooldown -= dt;
+  if (isMoving && hopCooldown <= 0) { hopActive = true; hopPhase = 0; hopCooldown = HOP_INTERVAL; }
+  if (hopActive) { hopPhase += dt / HOP_DURATION; if (hopPhase >= 1) { hopPhase = 1; hopActive = false; } }
+  const hopY = hopActive ? Math.sin(hopPhase * Math.PI) * HOP_HEIGHT : 0;
+
+  // ── Leg anim ───────────────────────────────────────────────────────────────
+  const legAngle = isMoving ? Math.sin(time * 14) * 0.4 : 0;
+  leftLeg.rotation.x  =  legAngle;
+  rightLeg.rotation.x = -legAngle;
+
+  const squish = hopActive ? 0.85 + Math.sin(hopPhase * Math.PI) * 0.25 : 1;
+  bodyMesh.scale.y = 0.7 * squish;
+  bodyMesh.scale.x = 1 + (1 - squish) * 0.3;
+
+  if (isMoving) {
+    let diff = targetFacing - frogFacing;
+    while (diff >  Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    frogFacing += diff * Math.min(1, dt * 12);
+  }
+
+  const fp = frogBody.position;
+  if (fp.y < 0.8) { frogBody.position.y = 0.8; frogBody.velocity.y = 0; }
+
+  frogGroup.position.set(fp.x, fp.y - 0.5 + hopY, fp.z);
+  frogGroup.rotation.y = frogFacing;
+
+  shadowBlob.position.set(fp.x, 0.01, fp.z);
+  const shadowScale = 1 - hopY * 0.5;
+  shadowBlob.scale.set(shadowScale, 1, shadowScale);
+  blobMat.opacity = 0.18 * shadowScale;
+
+  // ── Send position ──────────────────────────────────────────────────────────
+  maybeSendPosition(fp.x, fp.y - 0.5 + hopY, fp.z, frogFacing);
+
+  // ── Camera ────────────────────────────────────────────────────────────────
+  const targetCamPos = new THREE.Vector3(fp.x + CAM_OFFSET.x, CAM_OFFSET.y, fp.z + CAM_OFFSET.z);
+  camera.position.lerp(targetCamPos, 0.08);
+  camera.lookAt(fp.x, fp.y + 0.3, fp.z);
+  sunLight.position.set(fp.x + 20, 35, fp.z + 10);
+
+  // ── Remote frogs (interpolate + leg anim) ─────────────────────────────────
+  for (const id in remotePlayers) {
+    const p = remotePlayers[id];
+    const LERP = 0.15;
+    p.group.position.x += (p.tx - p.group.position.x) * LERP;
+    p.group.position.y += (p.ty - p.group.position.y) * LERP;
+    p.group.position.z += (p.tz - p.group.position.z) * LERP;
+
+    // Smooth rotation
+    let rd = p.try - p.group.rotation.y;
+    while (rd >  Math.PI) rd -= Math.PI * 2;
+    while (rd < -Math.PI) rd += Math.PI * 2;
+    p.group.rotation.y += rd * 0.15;
+
+    // Detect movement for leg anim
+    const moved = Math.abs(p.tx - p.prevX) + Math.abs(p.tz - p.prevZ) > 0.01;
+    if (moved) p.legPhase = (p.legPhase || 0) + dt * 14;
+    const la = moved ? Math.sin(p.legPhase) * 0.4 : 0;
+    p.leftLeg.rotation.x  =  la;
+    p.rightLeg.rotation.x = -la;
+  }
+
+  // ── Fireflies ──────────────────────────────────────────────────────────────
+  fireflies.forEach((ff) => {
+    const t2 = time * 0.4 + ff.phase;
+    ff.light.position.x = ff.ox + Math.sin(t2 * 1.3) * 3;
+    ff.light.position.z = ff.oz + Math.cos(t2 * 0.9) * 3;
+    ff.light.position.y = 1.5 + Math.sin(t2 * 2.1) * 0.8;
+    ff.dot.position.copy(ff.light.position);
+    ff.light.intensity = 0.5 + Math.sin(time * 3 + ff.phase) * 0.3;
+  });
+
+  renderer.render(scene, camera);
+}
+
+// ─── START BUTTON ─────────────────────────────────────────────────────────────
+document.getElementById('start-btn').addEventListener('click', () => {
+  const url = document.getElementById('ws-url').value.trim();
+  if (url) connectWS(url);
+
+  const ts = document.getElementById('title-screen');
+  ts.classList.add('fade-out');
+  setTimeout(() => ts.style.display = 'none', 800);
+  updatePlayerCount();
+  clock.start();
+  animate();
+});
+
+// ─── RESIZE ──────────────────────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+});
+
+camera.position.copy(CAM_OFFSET);
+camera.lookAt(0, 0, 0);
+renderer.render(scene, camera);
+</script>
+</body>
+</html>
